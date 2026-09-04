@@ -4,15 +4,22 @@ REM CALL it, do not run it. No setlocal on purpose: the caller keeps the variabl
 REM   call "\\aslfile01\aslcap\IT\software\Utilities\set_asl_env.cmd"
 REM   if errorlevel 1 exit /b %ERRORLEVEL%
 REM Switches: /quiet /noactivate /help. ASL_QUIET=1 is the same as /quiet.
-REM Sets: ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV, ASL_ENV_SOURCE, ASL_LIB_SOURCE
-REM ASL_LIB is PROD unless preset, or ASL_LIB_OVERRIDE names PROD, UAT or DEV.
+REM Sets: ASL_ENV, ASL_LIB, ASL_ROOT, PYTHONPATH, ASL_VENV, and a _SOURCE for each.
+REM Two independent axes: ASL_LIB is what python IMPORTS, ASL_ROOT is where the
+REM .py you RUN lives. ASL_LIB defaults to PROD; ASL_ROOT follows the working dir.
+REM ASL_LIB is PROD unless preset, or ASL_LIB_OVERRIDE names PROD, UAT, DEV or LOCAL.
 REM ASL_ENV only labels the run - it no longer selects the library.
-REM Exit: 0 ok, 2 ASL_ENV unusable, 3 could not detect. Both print why.
+REM Exit: 0 ok, 2 bad switch or ASL_LIB_OVERRIDE, 3 could not detect ASL_ENV.
 REM Detected in this order: ASL_ENV, then working dir or this folder, then inherited PYTHONPATH.
 
-set "ASL_LIB_PROD=\\aslfile01\aslcap\IT\software\Production\Python"
-set "ASL_LIB_UAT=\\aslfile01\aslcap\IT\software\UAT\Python"
-set "ASL_LIB_DEV=\\aslfile01\aslcap\IT\software\Development\Python"
+set "_ASL_ROOT_PROD=\\aslfile01\aslcap\IT\software\Production"
+set "_ASL_ROOT_UAT=\\aslfile01\aslcap\IT\software\UAT"
+set "_ASL_ROOT_DEV=\\aslfile01\aslcap\IT\software\Development"
+
+set "ASL_LIB_PROD=%_ASL_ROOT_PROD%\Python"
+set "ASL_LIB_UAT=%_ASL_ROOT_UAT%\Python"
+set "ASL_LIB_DEV=%_ASL_ROOT_DEV%\Python"
+set "ASL_LIB_LOCAL=C:\Program Files\Python"
 
 REM Caller may preset ASL_VENV to override.
 if not defined ASL_VENV set "ASL_VENV=C:\Applications\VirtualEnvironments\Operations"
@@ -97,13 +104,35 @@ if /I "%_ASL_TIER%"=="PRODUCTION"  set "ASL_LIB=%ASL_LIB_PROD%"
 if /I "%_ASL_TIER%"=="UAT"         set "ASL_LIB=%ASL_LIB_UAT%"
 if /I "%_ASL_TIER%"=="DEV"         set "ASL_LIB=%ASL_LIB_DEV%"
 if /I "%_ASL_TIER%"=="DEVELOPMENT" set "ASL_LIB=%ASL_LIB_DEV%"
+if /I "%_ASL_TIER%"=="LOCAL"       set "ASL_LIB=%ASL_LIB_LOCAL%"
 
 if not defined ASL_LIB (
-    echo ERROR: set_asl_env.cmd - ASL_LIB_OVERRIDE=%ASL_LIB_OVERRIDE% is not one of PROD, UAT, DEV.
+    echo ERROR: set_asl_env.cmd - ASL_LIB_OVERRIDE=%ASL_LIB_OVERRIDE% is not one of PROD, UAT, DEV, LOCAL.
     goto :fail_args
 )
 
 :have_lib
+
+REM ASL_ROOT is where job SCRIPTS live, and is independent of ASL_LIB above.
+REM Taken from the working directory: only a Production CWD gets Production,
+REM anything unrecognised gets Development. The tier name is matched from the
+REM CWD but the path is rebuilt from our own UNC roots, so a mapped drive or
+REM a lower-case Software folder cannot leak into the result.
+if defined ASL_ROOT (
+    set "ASL_ROOT_SOURCE=ASL_ROOT was preset by the caller"
+    goto :have_root
+)
+set "ASL_ROOT=%_ASL_ROOT_DEV%"
+set "ASL_ROOT_SOURCE=default, working directory names no tier"
+set "_ASL_CWD=%CD:\software\=|%"
+if "%_ASL_CWD%"=="%CD%" goto :have_root
+for /f "tokens=2 delims=|" %%A in ("%_ASL_CWD%") do set "_ASL_CWD=%%A"
+for /f "tokens=1 delims=\" %%A in ("%_ASL_CWD%") do set "_ASL_CWD=%%A"
+if /I "%_ASL_CWD%"=="Production"  set "ASL_ROOT=%_ASL_ROOT_PROD%" & set "ASL_ROOT_SOURCE=working directory"
+if /I "%_ASL_CWD%"=="UAT"         set "ASL_ROOT=%_ASL_ROOT_UAT%"  & set "ASL_ROOT_SOURCE=working directory"
+if /I "%_ASL_CWD%"=="Development" set "ASL_ROOT=%_ASL_ROOT_DEV%"  & set "ASL_ROOT_SOURCE=working directory"
+
+:have_root
 
 REM Package root only. ASL\utils holds a secrets.py that would shadow the stdlib
 REM secrets module, which numpy needs. One environment only, never a fallback.
@@ -113,8 +142,10 @@ if not defined _ASL_QUIET (
     echo ===========================================================================
     echo ASL_ENV     : %ASL_ENV%
     echo how         : %ASL_ENV_SOURCE%
-    echo library     : %ASL_LIB%
+    echo library     : %ASL_LIB%   (imports)
     echo lib from    : %ASL_LIB_SOURCE%
+    echo script root : %ASL_ROOT%   (the .py to run)
+    echo root from   : %ASL_ROOT_SOURCE%
     echo PYTHONPATH  : %PYTHONPATH%
     echo venv        : %ASL_VENV%
     echo host / user : %COMPUTERNAME% / %USERNAME%
@@ -135,9 +166,11 @@ if defined _ASL_NOACTIVATE goto :done
 REM Idempotent: python_venv_setup.cmd activates the same venv, and either may run first.
 if /I "%VIRTUAL_ENV%"=="%ASL_VENV%" goto :done
 
+REM Missing venv is a warning, not a failure - fall back to the system python.
 if not exist "%ASL_VENV%\Scripts\activate.bat" (
-    echo ERROR: set_asl_env.cmd - no venv at %ASL_VENV%\Scripts\activate.bat
-    goto :fail_args
+    echo WARNING: no venv at %ASL_VENV% - continuing on the system python.
+    set "ASL_VENV="
+    goto :done
 )
 call "%ASL_VENV%\Scripts\activate.bat"
 
@@ -159,11 +192,16 @@ REM ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV and ASL_ENV_SOURCE stay for the calle
 set "_ASL_PROBE="
 set "_ASL_HERE="
 set "_ASL_TIER="
+set "_ASL_CWD="
 set "_ASL_QUIET="
 set "_ASL_NOACTIVATE="
 set "ASL_LIB_PROD="
 set "ASL_LIB_UAT="
 set "ASL_LIB_DEV="
+set "ASL_LIB_LOCAL="
+set "_ASL_ROOT_PROD="
+set "_ASL_ROOT_UAT="
+set "_ASL_ROOT_DEV="
 goto :eof
 
 :usage
@@ -172,8 +210,11 @@ echo   /quiet        no banner, or set ASL_QUIET=1
 echo   /noactivate   set the variables, leave the venv alone
 echo Sets ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV, ASL_ENV_SOURCE.
 echo ASL_ENV comes from ASL_ENV, else the working dir or this folder, else PYTHONPATH.
-echo ASL_LIB is PROD unless preset, or ASL_LIB_OVERRIDE is PROD, UAT or DEV.
-echo Exit: 0 ok, 2 ASL_ENV unusable, 3 could not detect.
+echo ASL_LIB (imports) is PROD unless preset, or ASL_LIB_OVERRIDE is PROD, UAT, DEV or LOCAL.
+echo ASL_ROOT (script root) comes from the working directory - only Production and UAT
+echo are recognised there, anything else is Development. Preset ASL_ROOT to force it.
+echo A missing venv is a warning, not a failure - the run continues on the system python.
+echo Exit: 0 ok, 2 bad switch or ASL_LIB_OVERRIDE, 3 could not detect ASL_ENV.
 call :_cleanup
 exit /b 0
 

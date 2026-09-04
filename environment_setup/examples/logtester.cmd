@@ -49,8 +49,14 @@ echo --- asl_logging that will actually be imported ---
 python -c "import ASL.utils.asl_logging as m; print(m.__file__)"
 echo.
 
+echo --- where the two roots point ---
+echo   imports from : %ASL_LIB%
+echo   scripts from : %ASL_ROOT%   (%ASL_ROOT_SOURCE%)
+echo.
+
+REM Name the project, never the tier - ASL_ROOT follows the working directory.
 echo --- running logging_test.py ---
-REM python "%~dp0logging_test.py"
+REM python "%ASL_ROOT%\EOD\logging_test.py"
 set "RC=%ERRORLEVEL%"
 
 REM Guarded: an interactive prompt hangs forever under VisualCron.
