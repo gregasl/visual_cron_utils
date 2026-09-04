@@ -1,88 +1,58 @@
 @echo off
-REM ===========================================================================
-REM python_venv_setup.bat - select an existing ASL python virtual environment
-REM               under a root folder, then leave ASL_VENV pointing at it.
-REM
-REM This script does NOT create venvs. The venv must already exist; if it does
-REM not, the script prints why and fails. Create venvs by hand, once, outside
-REM of the job.
-REM
-REM CALL it, do not run it, if you want ASL_VENV to survive into your bat file.
-REM There is no setlocal in here on purpose, same as set_asl_env.bat.
-REM
-REM   call "%~dp0python_venv_setup.bat" /name:operations
+REM python_venv_setup.cmd - point ASL_VENV at an existing venv. Never creates one.
+REM CALL it, do not run it. No setlocal on purpose, same as set_asl_env.cmd.
+REM   call "%~dp0python_venv_setup.cmd" /name:operations
 REM   if errorlevel 1 exit /b %ERRORLEVEL%
-REM   call "%~dp0set_asl_env.bat"
-REM
-REM cmd.exe has no named parameters of its own - only %1..%9. The switches
-REM below are parsed by hand in the :args loop, which is why both spellings
-REM work:  /root:C:\Venvs   and   /root C:\Venvs
-REM
-REM Switches, any order:
-REM   /root:PATH        where venvs live, default C:\Applications\VirtualEnvironments
-REM   /name:NAME        venv folder name, default operations
-REM   /requirements:F   pip install -r F into the existing venv
-REM   /nopip            skip the pip upgrade
-REM   /quiet            do not print the banner
-REM
-REM Precedence, most explicit first: the switch, then a pre-set environment
-REM variable, a VisualCron job/task variable counts, then the default.
-REM
-REM Sets, for the caller:
-REM   VENV_ROOT      the root that was used
-REM   ASL_VENV_NAME  the venv folder name
-REM   ASL_VENV       the full path, which is the form set_asl_env.bat wants
-REM
-REM Exit codes: 0 ok, 2 bad switch or bad input, 4 venv missing or unusable,
-REM 5 pip install failed. Every failure prints why.
-REM ===========================================================================
+REM Switches, any order, /x:VALUE or /x VALUE:
+REM   /root:PATH         default C:\Applications\VirtualEnvironments
+REM   /name:NAME         default operations
+REM   /requirements:F    pip install -r F
+REM   /quiet             no banner, or set VENV_QUIET=1
+REM Precedence: switch, then a preset variable (a VisualCron job variable counts), then default.
+REM Sets: VENV_ROOT, ASL_VENV_NAME, ASL_VENV
+REM Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable, 5 pip failed.
 
-REM --- The only lines to edit when a path moves. -----------------------------
 set "_VENV_ROOT_DEFAULT=C:\Applications\VirtualEnvironments"
 set "_VENV_NAME_DEFAULT=operations"
 
-REM --- Switches --------------------------------------------------------------
 set "_VENV_NOPIP="
-set "_VENV_QUIET="
+REM VENV_QUIET=1 does the same as /quiet, for callers that cannot risk an unknown switch.
+set "_VENV_QUIET=%VENV_QUIET%"
 set "_VENV_REQ="
 set "_VENV_SW_PATH="
 
-REM _VENV_SW_PATH records that /root or /name was given explicitly. An
-REM explicit switch has to beat a pre-set ASL_VENV, which in a bat file that
-REM makes several calls is often just the leftover from the previous one.
+REM _VENV_SW_PATH: an explicit /root or /name must beat a leftover ASL_VENV from
+REM an earlier call in the same bat file.
 :args
 set "_VENV_A=%~1"
 if not defined _VENV_A goto :args_done
+if "%_VENV_A%"=="/?"                      goto :usage
+if /I "%_VENV_A%"=="/help"                goto :usage
 if /I "%_VENV_A:~0,6%"=="/root:"          set "VENV_ROOT=%_VENV_A:~6%"      & set "_VENV_SW_PATH=1" & shift & goto :args
 if /I "%_VENV_A:~0,6%"=="/name:"          set "ASL_VENV_NAME=%_VENV_A:~6%"  & set "_VENV_SW_PATH=1" & shift & goto :args
 if /I "%_VENV_A:~0,14%"=="/requirements:" set "_VENV_REQ=%_VENV_A:~14%"     & shift & goto :args
 if /I "%_VENV_A%"=="/root"                set "VENV_ROOT=%~2"      & set "_VENV_SW_PATH=1" & shift & shift & goto :args
 if /I "%_VENV_A%"=="/name"                set "ASL_VENV_NAME=%~2"  & set "_VENV_SW_PATH=1" & shift & shift & goto :args
 if /I "%_VENV_A%"=="/requirements"        set "_VENV_REQ=%~2"      & shift & shift & goto :args
-if /I "%_VENV_A%"=="/nopip"               set "_VENV_NOPIP=1"      & shift & goto :args
 if /I "%_VENV_A%"=="/quiet"               set "_VENV_QUIET=1"      & shift & goto :args
-echo python_venv_setup.bat: unknown switch "%_VENV_A%"
-echo python_venv_setup.bat: this script no longer creates venvs - /recreate
-echo and /python were removed. Create the venv by hand, then call this again.
+echo python_venv_setup.cmd: unknown switch "%_VENV_A%"
+echo python_venv_setup.cmd: /recreate and /python were removed. Create the venv by hand.
 goto :fail_args
 
 :args_done
 
-REM --- Fill in the blanks ----------------------------------------------------
 if defined _VENV_SW_PATH set "ASL_VENV="
 if not defined VENV_ROOT     set "VENV_ROOT=%_VENV_ROOT_DEFAULT%"
 if not defined ASL_VENV_NAME set "ASL_VENV_NAME=%_VENV_NAME_DEFAULT%"
 
-REM A trailing backslash on the root would double up in the joined path.
+REM A trailing backslash would double up in the joined path.
 if "%VENV_ROOT:~-1%"=="\" set "VENV_ROOT=%VENV_ROOT:~0,-1%"
 
-REM ASL_VENV may already hold a full path - a caller or a job variable that
-REM names the venv outright. Honour it, and take the name back out of it.
+REM A preset ASL_VENV is already a full path, so honour it and take the name back out.
 if defined ASL_VENV goto :have_full_path
 
-REM A name carrying a separator is really a path, so do not join it to the root.
-REM Tested by substitution rather than findstr: findstr does not reliably match
-REM a lone backslash even inside /C:, and silently joined C:\... onto the root.
+REM A name carrying a separator is really a path. Tested by substitution because
+REM findstr does not reliably match a lone backslash, even inside /C:.
 set "_VENV_T=%ASL_VENV_NAME:\=%"
 if not "%_VENV_T%"=="%ASL_VENV_NAME%" goto :name_is_path
 if "%ASL_VENV_NAME:~1,1%"==":"         goto :name_is_path
@@ -104,8 +74,6 @@ if not defined _VENV_QUIET (
     echo ===========================================================================
 )
 
-REM --- Require an existing venv ----------------------------------------------
-REM Nothing here creates anything. Say exactly what is missing and stop.
 if not exist "%VENV_ROOT%\" (
     echo ERROR: venv root does not exist: %VENV_ROOT%
     echo This script does not create venvs. Create the venv first.
@@ -127,17 +95,11 @@ if not exist "%ASL_VENV%\Scripts\python.exe" (
     goto :fail_venv
 )
 
-REM --- Activate, then furnish ------------------------------------------------
 call "%ASL_VENV%\Scripts\activate.bat"
 if errorlevel 1 (
     echo ERROR: could not activate %ASL_VENV%
     goto :fail_venv
 )
-
-if defined _VENV_NOPIP goto :req
-echo Upgrading pip
-"%ASL_VENV%\Scripts\python.exe" -m pip install --upgrade pip --disable-pip-version-check
-if errorlevel 1 echo WARNING: pip upgrade failed - carrying on.
 
 :req
 if not defined _VENV_REQ goto :report
@@ -160,12 +122,7 @@ if not defined _VENV_QUIET (
 call :_cleanup
 exit /b 0
 
-REM ===========================================================================
-REM Subroutines
-REM ===========================================================================
-
-REM Drop our scratch variables. VENV_ROOT, ASL_VENV_NAME and ASL_VENV are
-REM deliberately left behind for the caller.
+REM VENV_ROOT, ASL_VENV_NAME and ASL_VENV stay for the caller.
 :_cleanup
 set "_VENV_A="
 set "_VENV_NOPIP="
@@ -176,6 +133,18 @@ set "_VENV_NAME_DEFAULT="
 set "_VENV_SW_PATH="
 set "_VENV_T="
 goto :eof
+
+:usage
+echo Usage: call python_venv_setup.cmd [/root:PATH] [/name:NAME] [/requirements:FILE] [/quiet]
+echo   /root:PATH         default C:\Applications\VirtualEnvironments
+echo   /name:NAME         default operations
+echo   /requirements:F    pip install -r F
+echo   /quiet             no banner, or set VENV_QUIET=1
+echo Switches also accept a space: /name operations. Never creates a venv.
+echo Sets VENV_ROOT, ASL_VENV_NAME, ASL_VENV.
+echo Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable, 5 pip failed.
+call :_cleanup
+exit /b 0
 
 :fail_args
 call :_cleanup
