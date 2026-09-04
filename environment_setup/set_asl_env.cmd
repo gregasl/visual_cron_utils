@@ -4,7 +4,9 @@ REM CALL it, do not run it. No setlocal on purpose: the caller keeps the variabl
 REM   call "\\aslfile01\aslcap\IT\software\Utilities\set_asl_env.cmd"
 REM   if errorlevel 1 exit /b %ERRORLEVEL%
 REM Switches: /quiet /noactivate /help. ASL_QUIET=1 is the same as /quiet.
-REM Sets: ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV, ASL_ENV_SOURCE
+REM Sets: ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV, ASL_ENV_SOURCE, ASL_LIB_SOURCE
+REM ASL_LIB is PROD unless preset, or ASL_LIB_OVERRIDE names PROD, UAT or DEV.
+REM ASL_ENV only labels the run - it no longer selects the library.
 REM Exit: 0 ok, 2 ASL_ENV unusable, 3 could not detect. Both print why.
 REM Detected in this order: ASL_ENV, then working dir or this folder, then inherited PYTHONPATH.
 
@@ -71,15 +73,37 @@ if /I "%ASL_ENV%"=="UAT"         set "ASL_ENV=UAT"
 if /I "%ASL_ENV%"=="DEV"         set "ASL_ENV=DEV"
 if /I "%ASL_ENV%"=="DEVELOPMENT" set "ASL_ENV=DEV"
 
-set "ASL_LIB="
-if "%ASL_ENV%"=="PROD" set "ASL_LIB=%ASL_LIB_PROD%"
-if "%ASL_ENV%"=="UAT"  set "ASL_LIB=%ASL_LIB_UAT%"
-if "%ASL_ENV%"=="DEV"  set "ASL_LIB=%ASL_LIB_DEV%"
+REM ASL_LIB is PROD unless overridden. ASL_ENV labels the run, it no longer picks
+REM the library. A preset ASL_LIB wins outright; else ASL_LIB_OVERRIDE names the tier.
+if defined ASL_LIB (
+    set "ASL_LIB_SOURCE=ASL_LIB was preset by the caller"
+    goto :have_lib
+)
+
+set "_ASL_TIER=PROD"
+set "ASL_LIB_SOURCE=default"
+if defined ASL_LIB_OVERRIDE (
+    set "_ASL_TIER=%ASL_LIB_OVERRIDE:"=%"
+    set "ASL_LIB_SOURCE=ASL_LIB_OVERRIDE"
+)
+
+:_tier_lead
+if "%_ASL_TIER:~0,1%"==" " set "_ASL_TIER=%_ASL_TIER:~1%" & goto :_tier_lead
+:_tier_trail
+if "%_ASL_TIER:~-1%"==" " set "_ASL_TIER=%_ASL_TIER:~0,-1%" & goto :_tier_trail
+
+if /I "%_ASL_TIER%"=="PROD"        set "ASL_LIB=%ASL_LIB_PROD%"
+if /I "%_ASL_TIER%"=="PRODUCTION"  set "ASL_LIB=%ASL_LIB_PROD%"
+if /I "%_ASL_TIER%"=="UAT"         set "ASL_LIB=%ASL_LIB_UAT%"
+if /I "%_ASL_TIER%"=="DEV"         set "ASL_LIB=%ASL_LIB_DEV%"
+if /I "%_ASL_TIER%"=="DEVELOPMENT" set "ASL_LIB=%ASL_LIB_DEV%"
 
 if not defined ASL_LIB (
-    echo ERROR: set_asl_env.cmd - ASL_ENV=%ASL_ENV% is not one of PROD, UAT, DEV.
+    echo ERROR: set_asl_env.cmd - ASL_LIB_OVERRIDE=%ASL_LIB_OVERRIDE% is not one of PROD, UAT, DEV.
     goto :fail_args
 )
+
+:have_lib
 
 REM Package root only. ASL\utils holds a secrets.py that would shadow the stdlib
 REM secrets module, which numpy needs. One environment only, never a fallback.
@@ -90,6 +114,7 @@ if not defined _ASL_QUIET (
     echo ASL_ENV     : %ASL_ENV%
     echo how         : %ASL_ENV_SOURCE%
     echo library     : %ASL_LIB%
+    echo lib from    : %ASL_LIB_SOURCE%
     echo PYTHONPATH  : %PYTHONPATH%
     echo venv        : %ASL_VENV%
     echo host / user : %COMPUTERNAME% / %USERNAME%
@@ -100,8 +125,9 @@ if not exist "%ASL_LIB%\ASL\__init__.py" (
     echo WARNING: %ASL_LIB%\ASL\__init__.py not found - is the share reachable?
 )
 
-if "%ASL_ENV%"=="PROD" if not defined _ASL_QUIET (
-    echo *** Running against PRODUCTION libraries. ***
+REM PROD libs are the norm, so only the mismatch is worth saying out loud.
+if "%ASL_LIB%"=="%ASL_LIB_PROD%" if not "%ASL_ENV%"=="PROD" (
+    echo *** ASL_ENV=%ASL_ENV% but running against PRODUCTION libraries. ***
 )
 
 if defined _ASL_NOACTIVATE goto :done
@@ -129,6 +155,7 @@ REM ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV and ASL_ENV_SOURCE stay for the calle
 :_cleanup
 set "_ASL_PROBE="
 set "_ASL_HERE="
+set "_ASL_TIER="
 set "_ASL_QUIET="
 set "_ASL_NOACTIVATE="
 set "ASL_LIB_PROD="
@@ -142,6 +169,7 @@ echo   /quiet        no banner, or set ASL_QUIET=1
 echo   /noactivate   set the variables, leave the venv alone
 echo Sets ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV, ASL_ENV_SOURCE.
 echo ASL_ENV comes from ASL_ENV, else the working dir or this folder, else PYTHONPATH.
+echo ASL_LIB is PROD unless preset, or ASL_LIB_OVERRIDE is PROD, UAT or DEV.
 echo Exit: 0 ok, 2 ASL_ENV unusable, 3 could not detect.
 call :_cleanup
 exit /b 0
