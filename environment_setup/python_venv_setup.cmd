@@ -6,19 +6,16 @@ REM   if errorlevel 1 exit /b %ERRORLEVEL%
 REM Switches, any order, /x:VALUE or /x VALUE:
 REM   /root:PATH         default C:\Applications\VirtualEnvironments
 REM   /name:NAME         default operations
-REM   /requirements:F    pip install -r F
 REM   /quiet             no banner, or set VENV_QUIET=1
 REM Precedence: switch, then a preset variable (a VisualCron job variable counts), then default.
 REM Sets: VENV_ROOT, ASL_VENV_NAME, ASL_VENV
-REM Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable, 5 pip failed.
+REM Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable.
 
 set "_VENV_ROOT_DEFAULT=C:\Applications\VirtualEnvironments"
 set "_VENV_NAME_DEFAULT=operations"
 
-set "_VENV_NOPIP="
 REM VENV_QUIET=1 does the same as /quiet, for callers that cannot risk an unknown switch.
 set "_VENV_QUIET=%VENV_QUIET%"
-set "_VENV_REQ="
 set "_VENV_SW_PATH="
 
 REM _VENV_SW_PATH: an explicit /root or /name must beat a leftover ASL_VENV from
@@ -30,10 +27,8 @@ if "%_VENV_A%"=="/?"                      goto :usage
 if /I "%_VENV_A%"=="/help"                goto :usage
 if /I "%_VENV_A:~0,6%"=="/root:"          set "VENV_ROOT=%_VENV_A:~6%"      & set "_VENV_SW_PATH=1" & shift & goto :args
 if /I "%_VENV_A:~0,6%"=="/name:"          set "ASL_VENV_NAME=%_VENV_A:~6%"  & set "_VENV_SW_PATH=1" & shift & goto :args
-if /I "%_VENV_A:~0,14%"=="/requirements:" set "_VENV_REQ=%_VENV_A:~14%"     & shift & goto :args
 if /I "%_VENV_A%"=="/root"                set "VENV_ROOT=%~2"      & set "_VENV_SW_PATH=1" & shift & shift & goto :args
 if /I "%_VENV_A%"=="/name"                set "ASL_VENV_NAME=%~2"  & set "_VENV_SW_PATH=1" & shift & shift & goto :args
-if /I "%_VENV_A%"=="/requirements"        set "_VENV_REQ=%~2"      & shift & shift & goto :args
 if /I "%_VENV_A%"=="/quiet"               set "_VENV_QUIET=1"      & shift & goto :args
 echo python_venv_setup.cmd: unknown switch "%_VENV_A%"
 echo python_venv_setup.cmd: /recreate and /python were removed. Create the venv by hand.
@@ -95,23 +90,12 @@ if not exist "%ASL_VENV%\Scripts\python.exe" (
     goto :fail_venv
 )
 
+REM Idempotent: set_asl_env.cmd activates the same venv, and either may run first.
+if /I "%VIRTUAL_ENV%"=="%ASL_VENV%" goto :report
 call "%ASL_VENV%\Scripts\activate.bat"
 if errorlevel 1 (
     echo ERROR: could not activate %ASL_VENV%
     goto :fail_venv
-)
-
-:req
-if not defined _VENV_REQ goto :report
-if not exist "%_VENV_REQ%" (
-    echo ERROR: requirements file not found: %_VENV_REQ%
-    goto :fail_args
-)
-echo Installing from %_VENV_REQ%
-"%ASL_VENV%\Scripts\python.exe" -m pip install -r "%_VENV_REQ%" --disable-pip-version-check
-if errorlevel 1 (
-    echo ERROR: pip install -r %_VENV_REQ% failed.
-    goto :fail_pip
 )
 
 :report
@@ -125,9 +109,7 @@ exit /b 0
 REM VENV_ROOT, ASL_VENV_NAME and ASL_VENV stay for the caller.
 :_cleanup
 set "_VENV_A="
-set "_VENV_NOPIP="
 set "_VENV_QUIET="
-set "_VENV_REQ="
 set "_VENV_ROOT_DEFAULT="
 set "_VENV_NAME_DEFAULT="
 set "_VENV_SW_PATH="
@@ -135,14 +117,13 @@ set "_VENV_T="
 goto :eof
 
 :usage
-echo Usage: call python_venv_setup.cmd [/root:PATH] [/name:NAME] [/requirements:FILE] [/quiet]
+echo Usage: call python_venv_setup.cmd [/root:PATH] [/name:NAME] [/quiet]
 echo   /root:PATH         default C:\Applications\VirtualEnvironments
 echo   /name:NAME         default operations
-echo   /requirements:F    pip install -r F
 echo   /quiet             no banner, or set VENV_QUIET=1
 echo Switches also accept a space: /name operations. Never creates a venv.
 echo Sets VENV_ROOT, ASL_VENV_NAME, ASL_VENV.
-echo Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable, 5 pip failed.
+echo Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable.
 call :_cleanup
 exit /b 0
 
@@ -154,6 +135,3 @@ exit /b 2
 call :_cleanup
 exit /b 4
 
-:fail_pip
-call :_cleanup
-exit /b 5

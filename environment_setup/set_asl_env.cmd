@@ -132,6 +132,9 @@ if "%ASL_LIB%"=="%ASL_LIB_PROD%" if not "%ASL_ENV%"=="PROD" (
 
 if defined _ASL_NOACTIVATE goto :done
 
+REM Idempotent: python_venv_setup.cmd activates the same venv, and either may run first.
+if /I "%VIRTUAL_ENV%"=="%ASL_VENV%" goto :done
+
 if not exist "%ASL_VENV%\Scripts\activate.bat" (
     echo ERROR: set_asl_env.cmd - no venv at %ASL_VENV%\Scripts\activate.bat
     goto :fail_args
