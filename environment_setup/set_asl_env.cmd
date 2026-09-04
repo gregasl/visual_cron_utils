@@ -107,6 +107,22 @@ if defined ASL_ROOT (
     set "ASL_ROOT_SOURCE=preset by the caller"
     goto :have_root
 )
+if not defined ASL_ROOT_OVERRIDE goto :root_from_cwd
+set "_ASL_TIER=%ASL_ROOT_OVERRIDE%"
+call :_norm _ASL_TIER
+set "ASL_ROOT_SOURCE=ASL_ROOT_OVERRIDE"
+if /I "%_ASL_TIER%"=="PROD"        set "ASL_ROOT=%_ASL_ROOT_PROD%"
+if /I "%_ASL_TIER%"=="PRODUCTION"  set "ASL_ROOT=%_ASL_ROOT_PROD%"
+if /I "%_ASL_TIER%"=="UAT"         set "ASL_ROOT=%_ASL_ROOT_UAT%"
+if /I "%_ASL_TIER%"=="DEV"         set "ASL_ROOT=%_ASL_ROOT_DEV%"
+if /I "%_ASL_TIER%"=="DEVELOPMENT" set "ASL_ROOT=%_ASL_ROOT_DEV%"
+if not defined ASL_ROOT (
+    echo ERROR: set_asl_env.cmd - ASL_ROOT_OVERRIDE=%ASL_ROOT_OVERRIDE% is not one of PROD, UAT, DEV.
+    goto :fail_args
+)
+goto :have_root
+
+:root_from_cwd
 set "ASL_ROOT=%_ASL_ROOT_DEV%"
 set "ASL_ROOT_SOURCE=default, working directory names no tier"
 if /I "%_ASL_CWDTIER%"=="Production"  set "ASL_ROOT=%_ASL_ROOT_PROD%" & set "ASL_ROOT_SOURCE=working directory"
