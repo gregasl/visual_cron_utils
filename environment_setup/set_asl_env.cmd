@@ -1,16 +1,11 @@
 @echo off
-REM set_asl_env.cmd - pick the ASL environment, point PYTHONPATH at it, activate the venv.
+REM set_asl_env.cmd - point python at an ASL environment and activate the venv.
 REM CALL it, do not run it. No setlocal on purpose: the caller keeps the variables.
-REM   call "\\aslfile01\aslcap\IT\software\Utilities\set_asl_env.cmd"
+REM   call "\\aslfile01\aslcap\IT\software\Utilities\environment_setup\set_asl_env.cmd"
 REM   if errorlevel 1 exit /b %ERRORLEVEL%
-REM Switches: /quiet /noactivate /help. ASL_QUIET=1 is the same as /quiet.
-REM Sets: ASL_ENV, ASL_LIB, ASL_ROOT, PYTHONPATH, ASL_VENV, and a _SOURCE for each.
 REM Two independent axes: ASL_LIB is what python IMPORTS, ASL_ROOT is where the
 REM .py you RUN lives. ASL_LIB defaults to PROD; ASL_ROOT follows the working dir.
-REM ASL_LIB is PROD unless preset, or ASL_LIB_OVERRIDE names PROD, UAT, DEV or LOCAL.
-REM ASL_ENV only labels the run - it no longer selects the library.
-REM Exit: 0 ok, 2 bad switch or ASL_LIB_OVERRIDE, 3 could not detect ASL_ENV.
-REM Detected in this order: ASL_ENV, then working dir or this folder, then inherited PYTHONPATH.
+REM Run /help for the full contract.
 
 set "_ASL_ROOT_PROD=\\aslfile01\aslcap\IT\software\Production"
 set "_ASL_ROOT_UAT=\\aslfile01\aslcap\IT\software\UAT"
@@ -41,22 +36,25 @@ REM %~dp0 is this file's folder, not the caller's.
 set "_ASL_HERE=%~dp0"
 if "%_ASL_HERE:~-1%"=="\" set "_ASL_HERE=%_ASL_HERE:~0,-1%"
 
+REM One pass over the working directory, feeding both axes below.
+call :_tier_of "%CD%"
+set "_ASL_CWDTIER=%_ASL_TIERNAME%"
+
+REM --- ASL_ENV: a label. Preset wins, else the CWD, else this folder, else PYTHONPATH.
 if defined ASL_ENV (
     REM No parentheses in this value - the banner echoes it from inside an if-block.
-    set "ASL_ENV_SOURCE=ASL_ENV was already set by VisualCron or the caller"
+    set "ASL_ENV_SOURCE=preset by VisualCron or the caller"
     goto :normalise
 )
-
-REM Separator must not be a pipe - :_probe pipes this string into findstr.
-set "ASL_ENV_SOURCE=detected from the working directory"
-set "_ASL_PROBE=%CD% ; %_ASL_HERE%"
-call :_probe
-if defined ASL_ENV goto :normalise
-
-set "ASL_ENV_SOURCE=detected from the inherited PYTHONPATH"
-set "_ASL_PROBE=%PYTHONPATH%"
-call :_probe
-if defined ASL_ENV goto :normalise
+set "_ASL_TIERNAME=%_ASL_CWDTIER%"
+set "ASL_ENV_SOURCE=working directory"
+if defined _ASL_TIERNAME goto :from_tier
+call :_tier_of "%_ASL_HERE%"
+set "ASL_ENV_SOURCE=the folder this helper runs from"
+if defined _ASL_TIERNAME goto :from_tier
+call :_tier_of "%PYTHONPATH%"
+set "ASL_ENV_SOURCE=inherited PYTHONPATH"
+if defined _ASL_TIERNAME goto :from_tier
 
 echo ERROR: set_asl_env.cmd cannot tell which ASL environment to use.
 echo        working directory : %CD%
@@ -65,73 +63,55 @@ echo        PYTHONPATH        : %PYTHONPATH%
 echo        Set ASL_ENV to PROD, UAT or DEV on the job and re-run.
 goto :fail_detect
 
-:normalise
-REM A VisualCron job variable easily carries a space, and " PROD " would not match.
-:_trim_lead
-if not defined ASL_ENV goto :_trim_done
-if "%ASL_ENV:~0,1%"==" " set "ASL_ENV=%ASL_ENV:~1%" & goto :_trim_lead
-:_trim_trail
-if "%ASL_ENV:~-1%"==" " set "ASL_ENV=%ASL_ENV:~0,-1%" & goto :_trim_trail
-:_trim_done
+:from_tier
+if /I "%_ASL_TIERNAME%"=="Production"  set "ASL_ENV=PROD"
+if /I "%_ASL_TIERNAME%"=="UAT"         set "ASL_ENV=UAT"
+if /I "%_ASL_TIERNAME%"=="Development" set "ASL_ENV=DEV"
 
-if /I "%ASL_ENV%"=="PROD"        set "ASL_ENV=PROD"
+:normalise
+call :_norm ASL_ENV
 if /I "%ASL_ENV%"=="PRODUCTION"  set "ASL_ENV=PROD"
+if /I "%ASL_ENV%"=="DEVELOPMENT" set "ASL_ENV=DEV"
+if /I "%ASL_ENV%"=="PROD"        set "ASL_ENV=PROD"
 if /I "%ASL_ENV%"=="UAT"         set "ASL_ENV=UAT"
 if /I "%ASL_ENV%"=="DEV"         set "ASL_ENV=DEV"
-if /I "%ASL_ENV%"=="DEVELOPMENT" set "ASL_ENV=DEV"
 
-REM ASL_LIB is PROD unless overridden. ASL_ENV labels the run, it no longer picks
-REM the library. A preset ASL_LIB wins outright; else ASL_LIB_OVERRIDE names the tier.
+REM --- ASL_LIB: what python imports. PROD unless preset or overridden.
 if defined ASL_LIB (
-    set "ASL_LIB_SOURCE=ASL_LIB was preset by the caller"
+    set "ASL_LIB_SOURCE=preset by the caller"
     goto :have_lib
 )
-
 set "_ASL_TIER=PROD"
 set "ASL_LIB_SOURCE=default"
 if defined ASL_LIB_OVERRIDE (
-    set "_ASL_TIER=%ASL_LIB_OVERRIDE:"=%"
+    set "_ASL_TIER=%ASL_LIB_OVERRIDE%"
     set "ASL_LIB_SOURCE=ASL_LIB_OVERRIDE"
 )
-
-:_tier_lead
-if "%_ASL_TIER:~0,1%"==" " set "_ASL_TIER=%_ASL_TIER:~1%" & goto :_tier_lead
-:_tier_trail
-if "%_ASL_TIER:~-1%"==" " set "_ASL_TIER=%_ASL_TIER:~0,-1%" & goto :_tier_trail
-
+call :_norm _ASL_TIER
 if /I "%_ASL_TIER%"=="PROD"        set "ASL_LIB=%ASL_LIB_PROD%"
 if /I "%_ASL_TIER%"=="PRODUCTION"  set "ASL_LIB=%ASL_LIB_PROD%"
 if /I "%_ASL_TIER%"=="UAT"         set "ASL_LIB=%ASL_LIB_UAT%"
 if /I "%_ASL_TIER%"=="DEV"         set "ASL_LIB=%ASL_LIB_DEV%"
 if /I "%_ASL_TIER%"=="DEVELOPMENT" set "ASL_LIB=%ASL_LIB_DEV%"
 if /I "%_ASL_TIER%"=="LOCAL"       set "ASL_LIB=%ASL_LIB_LOCAL%"
-
 if not defined ASL_LIB (
     echo ERROR: set_asl_env.cmd - ASL_LIB_OVERRIDE=%ASL_LIB_OVERRIDE% is not one of PROD, UAT, DEV, LOCAL.
     goto :fail_args
 )
-
 :have_lib
 
-REM ASL_ROOT is where job SCRIPTS live, and is independent of ASL_LIB above.
-REM Taken from the working directory: only a Production CWD gets Production,
-REM anything unrecognised gets Development. The tier name is matched from the
-REM CWD but the path is rebuilt from our own UNC roots, so a mapped drive or
-REM a lower-case Software folder cannot leak into the result.
+REM --- ASL_ROOT: where the job's own .py lives. From the CWD tier parsed above.
+REM Only Production and UAT are recognised there; anything else is Development.
+REM The path is rebuilt from our own UNC roots, so a mapped drive cannot leak in.
 if defined ASL_ROOT (
-    set "ASL_ROOT_SOURCE=ASL_ROOT was preset by the caller"
+    set "ASL_ROOT_SOURCE=preset by the caller"
     goto :have_root
 )
 set "ASL_ROOT=%_ASL_ROOT_DEV%"
 set "ASL_ROOT_SOURCE=default, working directory names no tier"
-set "_ASL_CWD=%CD:\software\=|%"
-if "%_ASL_CWD%"=="%CD%" goto :have_root
-for /f "tokens=2 delims=|" %%A in ("%_ASL_CWD%") do set "_ASL_CWD=%%A"
-for /f "tokens=1 delims=\" %%A in ("%_ASL_CWD%") do set "_ASL_CWD=%%A"
-if /I "%_ASL_CWD%"=="Production"  set "ASL_ROOT=%_ASL_ROOT_PROD%" & set "ASL_ROOT_SOURCE=working directory"
-if /I "%_ASL_CWD%"=="UAT"         set "ASL_ROOT=%_ASL_ROOT_UAT%"  & set "ASL_ROOT_SOURCE=working directory"
-if /I "%_ASL_CWD%"=="Development" set "ASL_ROOT=%_ASL_ROOT_DEV%"  & set "ASL_ROOT_SOURCE=working directory"
-
+if /I "%_ASL_CWDTIER%"=="Production"  set "ASL_ROOT=%_ASL_ROOT_PROD%" & set "ASL_ROOT_SOURCE=working directory"
+if /I "%_ASL_CWDTIER%"=="UAT"         set "ASL_ROOT=%_ASL_ROOT_UAT%"  & set "ASL_ROOT_SOURCE=working directory"
+if /I "%_ASL_CWDTIER%"=="Development" set "ASL_ROOT=%_ASL_ROOT_DEV%"  & set "ASL_ROOT_SOURCE=working directory"
 :have_root
 
 REM Package root only. ASL\utils holds a secrets.py that would shadow the stdlib
@@ -140,13 +120,9 @@ set "PYTHONPATH=%ASL_LIB%"
 
 if not defined _ASL_QUIET (
     echo ===========================================================================
-    echo ASL_ENV     : %ASL_ENV%
-    echo how         : %ASL_ENV_SOURCE%
-    echo library     : %ASL_LIB%   (imports)
-    echo lib from    : %ASL_LIB_SOURCE%
-    echo script root : %ASL_ROOT%   (the .py to run)
-    echo root from   : %ASL_ROOT_SOURCE%
-    echo PYTHONPATH  : %PYTHONPATH%
+    echo ASL_ENV     : %ASL_ENV%   ^(%ASL_ENV_SOURCE%^)
+    echo library     : %ASL_LIB%   ^(imports, %ASL_LIB_SOURCE%^)
+    echo script root : %ASL_ROOT%   ^(the .py to run, %ASL_ROOT_SOURCE%^)
     echo venv        : %ASL_VENV%
     echo host / user : %COMPUTERNAME% / %USERNAME%
     echo ===========================================================================
@@ -178,42 +154,65 @@ call "%ASL_VENV%\Scripts\activate.bat"
 call :_cleanup
 exit /b 0
 
-:_probe
-echo %_ASL_PROBE% | findstr /I /C:"\software\Production" >nul
-if not errorlevel 1 set "ASL_ENV=PROD" & goto :eof
-echo %_ASL_PROBE% | findstr /I /C:"\software\UAT" >nul
-if not errorlevel 1 set "ASL_ENV=UAT" & goto :eof
-echo %_ASL_PROBE% | findstr /I /C:"\software\Development" >nul
-if not errorlevel 1 set "ASL_ENV=DEV" & goto :eof
+REM in: %1 a path. out: _ASL_TIERNAME = Production, UAT, Development, or empty.
+:_tier_of
+set "_ASL_TIERNAME="
+set "_ASL_T=%~1"
+if not defined _ASL_T goto :eof
+set "_ASL_T=%_ASL_T:\software\=|%"
+if "%_ASL_T%"=="%~1" goto :eof
+for /f "tokens=2 delims=|" %%A in ("%_ASL_T%") do set "_ASL_T=%%A"
+for /f "tokens=1 delims=\" %%A in ("%_ASL_T%") do set "_ASL_T=%%A"
+if /I "%_ASL_T%"=="Production"  set "_ASL_TIERNAME=Production"
+if /I "%_ASL_T%"=="UAT"         set "_ASL_TIERNAME=UAT"
+if /I "%_ASL_T%"=="Development" set "_ASL_TIERNAME=Development"
 goto :eof
 
-REM ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV and ASL_ENV_SOURCE stay for the caller.
+REM in: %1 a variable NAME. Strips quotes and outer spaces in place.
+:_norm
+call set "_ASL_T=%%%~1%%"
+set "_ASL_T=%_ASL_T:"=%"
+:_norm_lead
+if not defined _ASL_T goto :eof
+if "%_ASL_T:~0,1%"==" " set "_ASL_T=%_ASL_T:~1%" & goto :_norm_lead
+:_norm_trail
+if "%_ASL_T:~-1%"==" " set "_ASL_T=%_ASL_T:~0,-1%" & goto :_norm_trail
+set "%~1=%_ASL_T%"
+goto :eof
+
+REM ASL_ENV, ASL_LIB, ASL_ROOT, PYTHONPATH, ASL_VENV and the _SOURCEs stay for the caller.
 :_cleanup
-set "_ASL_PROBE="
 set "_ASL_HERE="
+set "_ASL_T="
 set "_ASL_TIER="
-set "_ASL_CWD="
+set "_ASL_TIERNAME="
+set "_ASL_CWDTIER="
 set "_ASL_QUIET="
 set "_ASL_NOACTIVATE="
+set "_ASL_ROOT_PROD="
+set "_ASL_ROOT_UAT="
+set "_ASL_ROOT_DEV="
 set "ASL_LIB_PROD="
 set "ASL_LIB_UAT="
 set "ASL_LIB_DEV="
 set "ASL_LIB_LOCAL="
-set "_ASL_ROOT_PROD="
-set "_ASL_ROOT_UAT="
-set "_ASL_ROOT_DEV="
 goto :eof
 
 :usage
 echo Usage: call set_asl_env.cmd [/quiet] [/noactivate]
 echo   /quiet        no banner, or set ASL_QUIET=1
 echo   /noactivate   set the variables, leave the venv alone
-echo Sets ASL_ENV, ASL_LIB, PYTHONPATH, ASL_VENV, ASL_ENV_SOURCE.
-echo ASL_ENV comes from ASL_ENV, else the working dir or this folder, else PYTHONPATH.
-echo ASL_LIB (imports) is PROD unless preset, or ASL_LIB_OVERRIDE is PROD, UAT, DEV or LOCAL.
-echo ASL_ROOT (script root) comes from the working directory - only Production and UAT
-echo are recognised there, anything else is Development. Preset ASL_ROOT to force it.
-echo A missing venv is a warning, not a failure - the run continues on the system python.
+echo.
+echo Sets ASL_ENV, ASL_LIB, ASL_ROOT, PYTHONPATH, ASL_VENV, and a _SOURCE for each.
+echo   ASL_LIB   what python IMPORTS. PROD unless preset, or ASL_LIB_OVERRIDE
+echo             names PROD, UAT, DEV or LOCAL. PYTHONPATH is set to it, alone.
+echo   ASL_ROOT  where the .py you RUN lives, eg %%ASL_ROOT%%\Futures\job.py.
+echo             From the working directory: only Production and UAT are
+echo             recognised there, anything else is Development.
+echo   ASL_ENV   a label only. Preset, else the working directory, else this
+echo             helper's folder, else the inherited PYTHONPATH.
+echo.
+echo A missing venv is a warning, not a failure - the run continues on system python.
 echo Exit: 0 ok, 2 bad switch or ASL_LIB_OVERRIDE, 3 could not detect ASL_ENV.
 call :_cleanup
 exit /b 0
