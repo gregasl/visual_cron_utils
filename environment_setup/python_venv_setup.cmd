@@ -31,7 +31,8 @@ if /I "%_VENV_A%"=="/root"                set "VENV_ROOT=%~2"      & set "_VENV_
 if /I "%_VENV_A%"=="/name"                set "ASL_VENV_NAME=%~2"  & set "_VENV_SW_PATH=1" & shift & shift & goto :args
 if /I "%_VENV_A%"=="/quiet"               set "_VENV_QUIET=1"      & shift & goto :args
 echo python_venv_setup.cmd: unknown switch "%_VENV_A%"
-echo python_venv_setup.cmd: /recreate and /python were removed. Create the venv by hand.
+echo python_venv_setup.cmd: /recreate, /python and /requirements were removed.
+echo Create the venv by hand and pip install into it separately.
 goto :fail_args
 
 :args_done
