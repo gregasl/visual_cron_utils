@@ -6,7 +6,7 @@ REM   if errorlevel 1 exit /b %ERRORLEVEL%
 REM Switches, any order, /x:VALUE or /x VALUE:
 REM   /root:PATH         default C:\Applications\VirtualEnvironments
 REM   /name:NAME         default operations
-REM   /quiet             no banner, or set VENV_QUIET=1
+REM   VENV_QUIET=1       no banner. An environment variable, not a switch.
 REM Precedence: switch, then a preset variable (a VisualCron job variable counts), then default.
 REM Sets: VENV_ROOT, ASL_VENV_NAME, ASL_VENV
 REM Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable.
@@ -14,7 +14,8 @@ REM Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable.
 set "_VENV_ROOT_DEFAULT=C:\Applications\VirtualEnvironments"
 set "_VENV_NAME_DEFAULT=operations"
 
-REM VENV_QUIET=1 does the same as /quiet, for callers that cannot risk an unknown switch.
+REM VENV_QUIET=1 suppresses the banner. A switch does not survive being passed
+REM through a wrapper variable, so quiet is an environment variable only.
 set "_VENV_QUIET=%VENV_QUIET%"
 set "_VENV_SW_PATH="
 
@@ -29,10 +30,10 @@ if /I "%_VENV_A:~0,6%"=="/root:"          set "VENV_ROOT=%_VENV_A:~6%"      & se
 if /I "%_VENV_A:~0,6%"=="/name:"          set "ASL_VENV_NAME=%_VENV_A:~6%"  & set "_VENV_SW_PATH=1" & shift & goto :args
 if /I "%_VENV_A%"=="/root"                set "VENV_ROOT=%~2"      & set "_VENV_SW_PATH=1" & shift & shift & goto :args
 if /I "%_VENV_A%"=="/name"                set "ASL_VENV_NAME=%~2"  & set "_VENV_SW_PATH=1" & shift & shift & goto :args
-if /I "%_VENV_A%"=="/quiet"               set "_VENV_QUIET=1"      & shift & goto :args
 echo python_venv_setup.cmd: unknown switch "%_VENV_A%"
 echo python_venv_setup.cmd: /recreate, /python and /requirements were removed.
 echo Create the venv by hand and pip install into it separately.
+echo /quiet was replaced by the VENV_QUIET=1 environment variable.
 goto :fail_args
 
 :args_done
@@ -118,10 +119,10 @@ set "_VENV_T="
 goto :eof
 
 :usage
-echo Usage: call python_venv_setup.cmd [/root:PATH] [/name:NAME] [/quiet]
+echo Usage: call python_venv_setup.cmd [/root:PATH] [/name:NAME]
 echo   /root:PATH         default C:\Applications\VirtualEnvironments
 echo   /name:NAME         default operations
-echo   /quiet             no banner, or set VENV_QUIET=1
+echo   VENV_QUIET=1       no banner. An environment variable, not a switch.
 echo Switches also accept a space: /name operations. Never creates a venv.
 echo Sets VENV_ROOT, ASL_VENV_NAME, ASL_VENV.
 echo Exit: 0 ok, 2 bad switch or input, 4 venv missing or unusable.

@@ -19,13 +19,13 @@ set "ASL_LIB_LOCAL=C:\Program Files\Python"
 REM Caller may preset ASL_VENV to override.
 if not defined ASL_VENV set "ASL_VENV=C:\Applications\VirtualEnvironments\Operations"
 
-REM ASL_QUIET=1 does the same as /quiet, for callers that cannot risk an unknown switch.
+REM ASL_QUIET=1 suppresses the banner. A switch does not survive being passed
+REM through a wrapper variable, so quiet is an environment variable only.
 set "_ASL_QUIET=%ASL_QUIET%"
 set "_ASL_NOACTIVATE="
 :args
 if "%~1"=="/?"             goto :usage
 if /I "%~1"=="/help"       goto :usage
-if /I "%~1"=="/quiet"      set "_ASL_QUIET=1"      & shift & goto :args
 if /I "%~1"=="/noactivate" set "_ASL_NOACTIVATE=1" & shift & goto :args
 if not "%~1"=="" (
     echo set_asl_env.cmd: unknown switch "%~1"
@@ -215,9 +215,9 @@ set "ASL_LIB_LOCAL="
 goto :eof
 
 :usage
-echo Usage: call set_asl_env.cmd [/quiet] [/noactivate]
-echo   /quiet        no banner, or set ASL_QUIET=1
+echo Usage: call set_asl_env.cmd [/noactivate]
 echo   /noactivate   set the variables, leave the venv alone
+echo   ASL_QUIET=1   no banner. An environment variable, not a switch.
 echo.
 echo Sets ASL_ENV, ASL_LIB, ASL_ROOT, PYTHONPATH, ASL_VENV, and a _SOURCE for each.
 echo   ASL_LIB   what python IMPORTS. PROD unless preset, or ASL_LIB_OVERRIDE

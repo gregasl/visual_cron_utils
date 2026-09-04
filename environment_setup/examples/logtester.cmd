@@ -22,13 +22,11 @@ echo --- inherited environment (set) ---
 set
 echo.
 
-REM Override ASL_ENV_HELPER to test another copy. Args default with it, so an
-REM overridden helper is never handed a switch it does not know.
-if not defined ASL_ENV_HELPER (
-    set "ASL_ENV_HELPER=\\aslfile01\aslcap\IT\software\Utilities\environment_setup\set_asl_env.cmd"
-    set "ASL_ENV_ARGS=/quiet"
-)
-call "%ASL_ENV_HELPER%" %ASL_ENV_ARGS%
+REM Override ASL_ENV_HELPER to test another copy. Quiet is a variable, so it
+REM survives the indirection and cannot arrive as a switch the helper rejects.
+set "ASL_QUIET=1"
+if not defined ASL_ENV_HELPER set "ASL_ENV_HELPER=\\aslfile01\aslcap\IT\software\Utilities\environment_setup\set_asl_env.cmd"
+call "%ASL_ENV_HELPER%"
 if errorlevel 1 (
     echo logtester.cmd stopping: set_asl_env.cmd returned %ERRORLEVEL%.
     exit /b %ERRORLEVEL%
