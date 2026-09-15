@@ -22,3 +22,15 @@ function VCAPI-Get-Job-Variable ([string]$JobId, [string]$Variable_Name) {
 
     Return $Variable_Value
 }
+
+function VCAPI-Get-Task-Variable ([string]$TaskId, [string]$Variable_Name) {
+
+    if (-not $TaskId) {
+        Write-Output "VCAPI-Get-Task-Variable: no TaskId supplied"
+        Return $null
+    }
+
+    $Variable_Value = VCAPI-Get-Variable("TASK(" + $TaskId + "|Variable|" + $Variable_Name + ")")
+
+    Return $Variable_Value
+}
