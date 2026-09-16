@@ -25,13 +25,8 @@ $VCAPI	= [Reflection.Assembly]::LoadFrom("C:\Program Files (x86)\VisualCron\Visu
 $Global:Client 	= New-Object -TypeName VisualCronAPI.Client
 $Global:Server 	= New-Object -TypeName VisualCronAPI.Server
 
-# VisualCron API credentials come from the shared ASL secrets store,
-# key VisualCronAdmin, stored as user:password. Never inline them here -
-# this file is in source control.
-. $PSScriptRoot\ASL_Secrets.ps1
-$_vc_cred = Get-ASLSecretUserPass 'VisualCronAdmin'
-$Conn_UserName			= 	$_vc_cred.UserName
-$Conn_PassWord			= 	$_vc_cred.Password
+# Read Only VisualCron User for API Access
+# VisualCron UserName and Password from your Site
 $Conn_Address			=	'ASLDYNAMICS01'
 
 # Standard Settings

@@ -14,6 +14,14 @@ param(
     [string]$TaskId = ""
 )
 
+# VisualCron API credentials come from the shared ASL secrets store,
+# key VisualCronAdmin, stored as user:password. Never inline them here -
+ this file is in source control.
+. $PSScriptRoot\ASL_Secrets.ps1
+$_vc_cred = Get-ASLSecretUserPass 'VisualCronAdmin'
+$Conn_UserName                 =       $_vc_cred.UserName
+$Conn_PassWord                 =       $_vc_cred.Password
+
 . \\aslfile01\aslcap\IT\software\production\scheduler\VisualCron_API.ps1
 
 $serverName = 'ASLDYNAMICS01'

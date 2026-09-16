@@ -30,6 +30,7 @@ function VCAPI-Get-Task-Variable ([string]$TaskId, [string]$Variable_Name) {
         Return $null
     }
 
+    Write-Output "VCAPI-Get-Task-Variable: Task $TaskId - Var $Variable_Name"
     $Variable_Value = VCAPI-Get-Variable("TASK(" + $TaskId + "|Variable|" + $Variable_Name + ")")
 
     Return $Variable_Value
